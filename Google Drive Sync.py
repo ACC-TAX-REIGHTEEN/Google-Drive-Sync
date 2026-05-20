@@ -31,7 +31,8 @@ def authenticate_drive():
     return build('drive', 'v3', credentials=creds)
 
 def get_or_create_folder(service, folder_name, parent_id=None):
-    query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+    safe_folder_name = folder_name.replace("'", "\\'")
+    query = f"mimeType='application/vnd.google-apps.folder' and name='{safe_folder_name}' and trashed=false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
     else:
@@ -41,6 +42,7 @@ def get_or_create_folder(service, folder_name, parent_id=None):
     items = results.get('files', [])
     
     if not items:
+        print(f"[BARU] Membuat folder di Drive: {folder_name}")
         folder_metadata = {
             'name': folder_name,
             'mimeType': 'application/vnd.google-apps.folder'
@@ -52,7 +54,8 @@ def get_or_create_folder(service, folder_name, parent_id=None):
     return items[0].get('id')
 
 def get_file_in_drive(service, file_name, parent_id):
-    query = f"name='{file_name}' and '{parent_id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'"
+    safe_file_name = file_name.replace("'", "\\'")
+    query = f"name='{safe_file_name}' and '{parent_id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'"
     results = service.files().list(q=query, spaces='drive', fields='files(id, name, md5Checksum)').execute()
     items = results.get('files', [])
     if items:
@@ -70,46 +73,46 @@ def sync_folder(service, local_path, drive_parent_id):
             if drive_file:
                 drive_md5 = drive_file.get('md5Checksum')
                 if local_md5 == drive_md5:
-                    print(f"--> Melewati file karena sama: {item}")
+                    print(f"--> [LEWAT] File sudah sama: {item}")
                     continue
                 else:
-                    print(f"--> Memperbarui file: {item}")
+                    print(f"--> [UPDATE] Memperbarui file yang berubah: {item}")
                     media = MediaFileUpload(item_path, resumable=True)
                     service.files().update(fileId=drive_file.get('id'), media_body=media).execute()
             else:
-                print(f"--> Mengunggah file baru: {item}")
+                print(f"--> [UNGGAH] Mengunggah file baru: {item}")
                 file_metadata = {'name': item, 'parents': [drive_parent_id]}
                 media = MediaFileUpload(item_path, resumable=True)
                 service.files().create(body=file_metadata, media_body=media, fields='id').execute()
                 
         elif os.path.isdir(item_path):
-            print(f"--> Memasuki folder: {item}")
+            print(f"\n--> [MASUK] Memproses sub-folder lokal: {item}")
             new_drive_folder_id = get_or_create_folder(service, item, drive_parent_id)
             sync_folder(service, item_path, new_drive_folder_id)
 
 def main():
-    print("--> Memulai proses unggah direktori")
+    print("--> Memulai Proses Sinkronisasi Backup Google Drive")
     service = authenticate_drive()
     
     root_folder_id = get_or_create_folder(service, DRIVE_FOLDER_NAME)
     
     list_folder_lokal = [
         r'E:\local', 
-        r'D:\local'
+        r'E:\local'
     ]
     
     for folder_path in list_folder_lokal:
         if os.path.exists(folder_path):
             nama_folder_asli = os.path.basename(folder_path.strip(r'\/'))
-            print(f"\n--> Memproses folder lokal: {folder_path}")
+            print(f"\n>>> Memproses direktori utama: {folder_path} -> Menjadi folder Drive: {nama_folder_asli}")
             
             target_drive_id = get_or_create_folder(service, nama_folder_asli, root_folder_id)
             
             sync_folder(service, folder_path, target_drive_id)
         else:
-            print(f"[PERINGATAN] Folder tidak ditemukan: {folder_path}")
+            print(f"\n[PERINGATAN] Folder tidak ditemukan di komputer: {folder_path}")
         
-    print("\n--> Semua proses selesai")
+    print("--> Semua proses pencadangan selesai dengan aman!")
 
 if __name__ == '__main__':
     main()
