@@ -98,7 +98,7 @@ def main():
     
     list_folder_lokal = [
         r'E:\local', 
-        r'E:\local'
+        r'D:\local'
     ]
     
     for folder_path in list_folder_lokal:
